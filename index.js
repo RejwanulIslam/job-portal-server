@@ -7,11 +7,34 @@ require('dotenv').config()
 const port = process.env.PORT || 5000
 
 app.use(cors({
-  origin:['http://localhost:5173'],
-  credentials:true
+  origin: ['http://localhost:5173'],
+  credentials: true
 }))
 app.use(cookieparser())
 app.use(express.json())
+
+const logger = (req, res, next) => {
+  console.log('inside theloger')
+  next()
+}
+
+const veryfyTocken = (req, res, next) => {
+  console.log('veryfyTocken middelware', req.cookies)
+  const token = req?.cookies?.token
+  if (!token) {
+    return res.status(401).send({ message: 'unauthorige access' })
+  }
+
+  jwt.verify(token, process.env.JWI_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(401).send({ message: 'unauthorige access' })
+
+    }
+    req.user = decoded
+    next()
+  })
+
+}
 
 
 
@@ -39,19 +62,19 @@ async function run() {
     const jobportal = client.db("JobPortal").collection("job");
     const job_application_collection = client.db("JobPortal").collection("jobApplication");
 
-    
-    
-    
+
+
+
     //auth releted api
-    app.post('/jwt',async(req,res)=>{
+    app.post('/jwt', async (req, res) => {
       const user = req.body
-      const token = jwt.sign(user,process.env.JWI_SECRET,{expiresIn:60*60})
+      const token = jwt.sign(user, process.env.JWI_SECRET, { expiresIn: 60 * 60 })
       res
-      .cookie('token',token,{
-        httpOnly:true,
-        secure:false,
-      })
-      .send({success:true}) 
+        .cookie('token', token, {
+          httpOnly: true,
+          secure: false,
+        })
+        .send({ success: true })
     })
 
 
@@ -66,7 +89,8 @@ async function run() {
       res.send(result)
     })
 
-    app.get('/job', async (req, res) => {
+    app.get('/job', logger, async (req, res) => {
+      console.log('now inside the loger')
       const email = req.query.email
       let quary = {}
       if (email) {
@@ -141,12 +165,15 @@ async function run() {
       res.send(result)
     })
 
-    app.get('/job-application', async (req, res) => {
+    app.get('/job-application', veryfyTocken, async (req, res) => {
       const email = req.query.email
       const quary = { job_applicant: email }
 
+      if(req.user.email !==req.query.email){
+        return res.status(403).send({ message: 'unauthorige access' })
 
-      console.log('coooooookis',req.cookies)
+      }
+      console.log('coooooookis', req.cookies)
       const result = await job_application_collection.find(quary).toArray()
 
       for (const application of result) {
